@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minimal Arcade Fighter</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      color: #fff;
+      font-family: monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    #game-container {
+      position: relative;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .health-bar {
+      width: 40%;
+      height: 20px;
+      background: #444;
+      border: 2px solid #fff;
+    }
+    .health-fill {
+      height: 100%;
+      background: #e63946;
+      width: 100%;
+      transition: width 0.1s;
+    }
+    canvas {
+      border: 4px solid #fff;
+      background: #222;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container">
+    <div id="ui">
+      <div class="health-bar"><div id="p1-health" class="health-fill"></div></div>
+      <div id="timer">60</div>
+      <div class="health-bar"><div id="p2-health" class="health-fill"></div></div>
+    </div>
+    <canvas id="fighterCanvas" width="800" height="400"></canvas>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('fighterCanvas');
+    const ctx = canvas.getContext('2d');
+
+    const gravity = 0.7;
+
+    class Fighter {
+      constructor({ position, velocity, color, offset }) {
+        this.position = position;
+        this.velocity = velocity;
+        this.width = 50;
+        this.height = 120;
+        this.color = color;
+        this.isAttacking = false;
+        this.attackBox = {
+          position: { x: this.position.x, y: this.position.y },
+          offset: offset,
+          width: 80,
+          height: 50
+        };
+        this.health = 100;
+        this.isGrounded = false;
+      }
+
+      draw() {
+        // Character Body
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.position.x, this.position.y, this.width, this.height);
+
+        // Attack Swing
+        if (this.isAttacking) {
+          ctx.fillStyle = 'yellow';
+          ctx.fillRect(
+            this.attackBox.position.x,
+            this.attackBox.position.y,
+            this.attackBox.width,
+            this.attackBox.height
+          );
+        }
+      }
+
+      update() {
+        this.draw();
+
+        this.attackBox.position.x = this.position.x + this.attackBox.offset.x;
+        this.attackBox.position.y = this.position.y;
+
+        this.position.x += this.velocity.x;
+        this.position.y += this.velocity.y;
+
+        // Gravity & Ground Collision
+        if (this.position.y + this.height + this.velocity.y >= canvas.height - 20) {
+          this.velocity.y = 0;
+          this.position.y = canvas.height - 20 - this.height;
+          this.isGrounded = true;
+        } else {
+          this.velocity.y += gravity;
+          this.isGrounded = false;
+        }
+
+        // Screen Boundaries
+        if (this.position.x < 0) this.position.x = 0;
+        if (this.position.x + this.width > canvas.width) this.position.x = canvas.width - this.width;
+      }
+
+      attack() {
+        this.isAttacking = true;
+        setTimeout(() => {
+          this.isAttacking = false;
+        }, 100);
+      }
+    }
+
+    const player1 = new Fighter({
+      position: { x: 100, y: 0 },
+      velocity: { x: 0, y: 0 },
+      color: '#1e90ff',
+      offset: { x: 0, y: 0 }
+    });
+
+    const player2 = new Fighter({
+      position: { x: 650, y: 0 },
+      velocity: { x: 0, y: 0 },
+      color: '#ff4500',
+      offset: { x: -30, y: 0 }
+    });
+
+    const keys = {
+      a: { pressed: false },
+      d: { pressed: false },
+      ArrowLeft: { pressed: false },
+      ArrowRight: { pressed: false }
+    };
+
+    function checkCollision(attacker, defender) {
+      return (
+        attacker.attackBox.position.x < defender.position.x + defender.width &&
+        attacker.attackBox.position.x + attacker.attackBox.width > defender.position.x &&
+        attacker.attackBox.position.y < defender.position.y + defender.height &&
+        attacker.attackBox.position.y + attacker.attackBox.height > defender.position.y
+      );
+    }
+
+    function animate() {
+      window.requestAnimationFrame(animate);
+      ctx.fillStyle = '#222';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Stage Floor
+      ctx.fillStyle = '#444';
+      ctx.fillRect(0, canvas.height - 20, canvas.width, 20);
+
+      // P1 Movement
+      player1.velocity.x = 0;
+      if (keys.a.pressed) player1.velocity.x = -5;
+      if (keys.d.pressed) player1.velocity.x = 5;
+
+      // P2 Movement
+      player2.velocity.x = 0;
+      if (keys.ArrowLeft.pressed) player2.velocity.x = -5;
+      if (keys.ArrowRight.pressed) player2.velocity.x = 5;
+
+      player1.update();
+      player2.update();
+
+      // P1 Attack Hit Detection
+      if (player1.isAttacking && checkCollision(player1, player2)) {
+        player1.isAttacking = false;
+        player2.health = Math.max(0, player2.health - 10);
+        document.getElementById('p2-health').style.width = player2.health + '%';
+      }
+
+      // P2 Attack Hit Detection
+      if (player2.isAttacking && checkCollision(player2, player1)) {
+        player2.isAttacking = false;
+        player1.health = Math.max(0, player1.health - 10);
+        document.getElementById('p1-health').style.width = player1.health + '%';
+      }
+    }
+
+    animate();
+
+    window.addEventListener('keydown', (e) => {
+      switch (e.key) {
+        // Player 1
+        case 'a': keys.a.pressed = true; break;
+        case 'd': keys.d.pressed = true; break;
+        case 'w': if (player1.isGrounded) player1.velocity.y = -15; break;
+        case ' '; player1.attack(); break;
+
+        // Player 2
+        case 'ArrowLeft': keys.ArrowLeft.pressed = true; break;
+        case 'ArrowRight': keys.ArrowRight.pressed = true; break;
+        case 'ArrowUp': if (player2.isGrounded) player2.velocity.y = -15; break;
+        case 'Enter': player2.attack(); break;
+      }
+    });
+
+    window.addEventListener('keyup', (e) => {
+      switch (e.key) {
+        case 'a': keys.a.pressed = false; break;
+        case 'd': keys.d.pressed = false; break;
+        case 'ArrowLeft': keys.ArrowLeft.pressed = false; break;
+        case 'ArrowRight': keys.ArrowRight.pressed = false; break;
+      }
+    });
+  </script>
+</body>
+</html>
