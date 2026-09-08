@@ -1,245 +1,108 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Ninja Fighting Engine</title>
-  <style>
-    body { margin: 0; overflow: hidden; background-color: #0d0d0d; font-family: 'Courier New', monospace; color: white; }
-    #ui { position: absolute; top: 10px; width: 100%; display: flex; justify-content: center; z-index: 10; }
-    .health-container { width: 350px; height: 30px; background: rgba(50,50,50,0.8); border: 3px solid #fff; margin: 0 15px; position: relative; }
-    .health-bar { height: 100%; background: #00ff00; transition: width 0.1s; width: 100%; }
-    .name-label { position: absolute; bottom: 35px; left: 5px; text-transform: uppercase; font-weight: bold; }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shadow Arena 3D</title>
+
+<style>
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#050509;font-family:Arial,sans-serif}
+canvas{display:block}
+
+#hud{
+  position:fixed;top:18px;left:0;width:100%;
+  display:flex;align-items:center;justify-content:center;
+  gap:22px;z-index:5;pointer-events:none
+}
+
+.bar{
+  width:min(38vw,430px);height:30px;
+  background:#17171d;border:3px solid #eee;
+  box-shadow:0 0 15px #000;position:relative
+}
+.health{
+  width:100%;height:100%;
+  background:linear-gradient(90deg,#23e56b,#ffe34a,#ff3939);
+  transition:width .12s
+}
+.name{
+  position:absolute;top:-25px;font-size:13px;
+  font-weight:bold;text-shadow:2px 2px 4px #000
+}
+.left .name{left:0}
+.right .name{right:0}
+
+#round{
+  position:fixed;top:58px;left:50%;
+  transform:translateX(-50%);
+  color:#fff;font-weight:bold;letter-spacing:3px;
+  text-shadow:0 0 10px #f44;z-index:5
+}
+
+#message{
+  position:fixed;left:50%;top:42%;
+  transform:translate(-50%,-50%);
+  color:#fff;font-size:54px;font-weight:900;
+  text-shadow:0 5px 20px #000,0 0 25px #ff3045;
+  z-index:10;display:none
+}
+
+#controls{
+  position:fixed;bottom:15px;left:50%;
+  transform:translateX(-50%);
+  color:#bbb;background:#08080ccc;
+  padding:9px 15px;border:1px solid #333;
+  border-radius:8px;font-size:13px;z-index:5
+}
+</style>
 </head>
+
 <body>
 
-<div id="ui">
-  <div class="health-container">
-    <div class="name-label" style="color: #ffcc00;">Yellow Ninja (P1)</div>
-    <div id="p1-health" class="health-bar"></div>
+<div id="hud">
+  <div class="bar left">
+    <div class="name">RAVEN</div>
+    <div id="pHealth" class="health"></div>
   </div>
-  <div class="health-container">
-    <div class="name-label" style="right:5px; left:auto; color: #00ccff;">Blue Ninja (AI)</div>
-    <div id="p2-health" class="health-bar"></div>
+
+  <div id="round">ROUND 1</div>
+
+  <div class="bar right">
+    <div class="name">IRON WRAITH</div>
+    <div id="aHealth" class="health"></div>
   </div>
 </div>
 
+<div id="message"></div>
+
+<div id="controls">
+  A / D Move &nbsp; • &nbsp;
+  W Jump &nbsp; • &nbsp;
+  J Punch &nbsp; • &nbsp;
+  K Kick &nbsp; • &nbsp;
+  L Block
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
 <script>
-let scene, camera, renderer, clock;
-let player, ai;
-const gravity = 0.015;
-const floorY = 0;
+/* =========================================================
+   SHADOW ARENA
+   Original procedural 3D fighting game
+   ========================================================= */
 
-function init() {
-  scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x111116);
-  scene.fog = new THREE.Fog(0x111116, 10, 30);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07070c);
+scene.fog = new THREE.Fog(0x07070c,18,55);
 
-  camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-  camera.position.set(0, 2.5, 7);
+const camera = new THREE.PerspectiveCamera(
+  55,innerWidth/innerHeight,.1,200
+);
 
-  renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setSize(window.innerWidth, window.innerHeight);
-  renderer.shadowMap.enabled = true;
-  document.body.appendChild(renderer.domElement);
-  
-  clock = new THREE.Clock();
-
-  // Lighting
-  scene.add(new THREE.AmbientLight(0x555555));
-  const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-  dirLight.position.set(5, 10, 5);
-  dirLight.castShadow = true;
-  scene.add(dirLight);
-
-  // Floor Arena
-  const floorGeo = new THREE.PlaneGeometry(100, 100);
-  const floorMat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.8 });
-  const floor = new THREE.Mesh(floorGeo, floorMat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.receiveShadow = true;
-  scene.add(floor);
-
-  // Create Original Stylized Characters
-  player = createNinja(new THREE.Vector3(-2, floorY, 0), 0xffcc00, 0x111111, false); // Yellow / Black
-  scene.add(player.group);
-
-  ai = createNinja(new THREE.Vector3(2, floorY, 0), 0x00ccff, 0x1a1a2e, true); // Blue / Dark Slate
-  scene.add(ai.group);
-}
-
-function createNinja(pos, primaryColor, secondaryColor, isAI) {
-  const group = new THREE.Group();
-  group.position.copy(pos);
-
-  const matPrimary = new THREE.MeshStandardMaterial({ color: primaryColor, roughness: 0.4 });
-  const matSecondary = new THREE.MeshStandardMaterial({ color: secondaryColor, roughness: 0.6 });
-  const matSkin = new THREE.MeshStandardMaterial({ color: 0xd2a679 });
-  const matBlack = new THREE.MeshStandardMaterial({ color: 0x050505 });
-
-  // Torso & V-Vest
-  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.9, 1.4, 0.5), matSecondary);
-  torso.position.y = 1.9;
-  group.add(torso);
-
-  const vestL = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.45, 0.55), matPrimary);
-  vestL.position.set(-0.25, 1.9, 0);
-  group.add(vestL);
-
-  const vestR = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.45, 0.55), matPrimary);
-  vestR.position.set(0.25, 1.9, 0);
-  group.add(vestR);
-
-  // Shoulder Pads
-  const shoulderL = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.6), matPrimary);
-  shoulderL.position.set(-0.65, 2.5, 0);
-  group.add(shoulderL);
-
-  const shoulderR = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.25, 0.6), matPrimary);
-  shoulderR.position.set(0.65, 2.5, 0);
-  group.add(shoulderR);
-
-  // Head, Cowl, and Ninja Mask
-  const headGroup = new THREE.Group();
-  headGroup.position.y = 2.9;
-  group.add(headGroup);
-
-  const headBase = new THREE.Mesh(new THREE.SphereGeometry(0.35, 16, 16), matSkin);
-  headGroup.add(headBase);
-
-  // Hood / Cowl
-  const hood = new THREE.Mesh(new THREE.SphereGeometry(0.38, 16, 16, 0, Math.PI * 2, 0, Math.PI * 0.7), matBlack);
-  headGroup.add(hood);
-
-  // Lower Face Mask
-  const faceMask = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, 0.35), matPrimary);
-  faceMask.position.set(0, -0.1, 0.1);
-  headGroup.add(faceMask);
-
-  // Limbs
-  const armL = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 1), matSecondary);
-  armL.position.set(-0.65, 1.9, 0);
-  group.add(armL);
-
-  const armR = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 1), matSecondary);
-  armR.position.set(0.65, 1.9, 0);
-  group.add(armR);
-
-  const legL = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.12, 1.2), matSecondary);
-  legL.position.set(-0.25, 0.6, 0);
-  group.add(legL);
-
-  const legR = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.12, 1.2), matSecondary);
-  legR.position.set(0.25, 0.6, 0);
-  group.add(legR);
-
-  return {
-    group, armR, armL,
-    velocity: new THREE.Vector3(),
-    health: 100,
-    isGrounded: true,
-    isAttacking: false,
-    attackTimer: 0,
-    isAI
-  };
-}
-
-// Controls & Physics
-const keys = { a: false, d: false, w: false, space: false };
-let aiCooldown = 0;
-
-function updatePhysics(char) {
-  if (!char.isGrounded) char.velocity.y -= gravity;
-  char.group.position.add(char.velocity);
-
-  if (char.group.position.y <= floorY) {
-    char.group.position.y = floorY;
-    char.velocity.y = 0;
-    char.isGrounded = true;
-  }
-  char.velocity.x *= 0.85;
-}
-
-function handleCombat(attacker, defender) {
-  if (attacker.isAttacking) {
-    attacker.attackTimer += clock.getDelta();
-
-    attacker.armR.rotation.x = -Math.PI / 2;
-    attacker.armR.position.z = 0.5;
-
-    if (attacker.attackTimer < 0.1 && attacker.group.position.distanceTo(defender.group.position) < 1.8) {
-       defender.health = Math.max(0, defender.health - 10);
-       const barId = defender.isAI ? 'p2-health' : 'p1-health';
-       document.getElementById(barId).style.width = defender.health + '%';
-       attacker.attackTimer = 1;
-    }
-
-    if (attacker.attackTimer > 0.3) {
-      attacker.isAttacking = false;
-      attacker.attackTimer = 0;
-      attacker.armR.rotation.x = 0;
-      attacker.armR.position.z = 0;
-    }
-  }
-}
-
-function updateAI(delta) {
-  const dist = ai.group.position.distanceTo(player.group.position);
-  ai.group.rotation.y = ai.group.position.x < player.group.position.x ? Math.PI / 2 : -Math.PI / 2;
-
-  if (dist > 1.6) {
-    ai.velocity.x = ai.group.position.x < player.group.position.x ? 0.05 : -0.05;
-  } else {
-    aiCooldown -= delta;
-    if (aiCooldown <= 0 && !ai.isAttacking) {
-      ai.isAttacking = true;
-      aiCooldown = 0.8 + Math.random();
-    }
-  }
-}
-
-function animate() {
-  requestAnimationFrame(animate);
-  const delta = clock.getDelta();
-
-  // Player Input
-  player.velocity.x = 0;
-  if (keys.a) player.velocity.x = -0.08;
-  if (keys.d) player.velocity.x = 0.08;
-  if (keys.w && player.isGrounded) { player.velocity.y = 0.3; player.isGrounded = false; }
-  if (keys.space && !player.isAttacking) player.isAttacking = true;
-
-  player.group.rotation.y = player.group.position.x < ai.group.position.x ? Math.PI / 2 : -Math.PI / 2;
-
-  updateAI(delta);
-  updatePhysics(player);
-  updatePhysics(ai);
-  handleCombat(player, ai);
-  handleCombat(ai, player);
-
-  // Camera tracking
-  const midX = (player.group.position.x + ai.group.position.x) / 2;
-  const currentDist = Math.abs(player.group.position.x - ai.group.position.x);
-  camera.position.x = midX;
-  camera.position.z = Math.max(6, 4 + currentDist * 0.8);
-  camera.lookAt(midX, 1.5, 0);
-
-  renderer.render(scene, camera);
-}
-
-window.addEventListener('keydown', e => {
-  if(e.key === 'a') keys.a = true; if(e.key === 'd') keys.d = true; if(e.key === 'w') keys.w = true; if(e.key === ' ') keys.space = true;
-});
-window.addEventListener('keyup', e => {
-  if(e.key === 'a') keys.a = false; if(e.key === 'd') keys.d = false; if(e.key === 'w') keys.w = false; if(e.key === ' ') keys.space = false;
-});
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);
+const renderer = new THREE.WebGLRenderer({
+  antialias:true
 });
 
-init();
-animate();
-</script>
-</body>
-</html>
+renderer.setSize(innerWidth,innerHeight);
+renderer
