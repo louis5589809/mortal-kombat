@@ -2,434 +2,252 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>3D Mortal Kombat Style Fighter</title>
+  <title>3D Fighter - AI Opponent</title>
   <style>
-    body {
-      margin: 0;
-      overflow: hidden;
-      background: #000;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      user-select: none;
-    }
+    body { margin: 0; overflow: hidden; background-color: #000; font-family: sans-serif; }
     #ui {
-      position: absolute;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%);
-      width: 90%;
-      max-width: 900px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      z-index: 10;
+      position: absolute; top: 20px; left: 0; width: 100%;
+      display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box;
     }
-    .player-label {
-      font-weight: bold;
-      font-size: 18px;
-      letter-spacing: 1px;
-      margin-bottom: 5px;
-      text-transform: uppercase;
-      text-shadow: 0 0 5px rgba(0,0,0,0.8);
+    .health-bar-container {
+      width: 40%; height: 30px; background: #333; border: 2px solid #fff; border-radius: 4px; overflow: hidden;
     }
-    .p1-color { color: #00aaff; }
-    .p2-color { color: #ff3333; }
-    .health-bar {
-      width: 40%;
-      height: 26px;
-      background: rgba(20, 20, 20, 0.8);
-      border: 2px solid #555;
-      border-radius: 4px;
-      overflow: hidden;
-      box-shadow: 0 0 15px rgba(0,0,0,0.8);
-      position: relative;
-    }
-    .health-fill {
-      height: 100%;
-      width: 100%;
-      transition: width 0.15s ease-out;
-    }
-    #p1-health { background: linear-gradient(90deg, #0055ff, #00aaff); float: left; }
-    #p2-health { background: linear-gradient(90deg, #ff3333, #ff6600); float: right; }
-    #timer {
-      font-size: 32px;
-      font-weight: 900;
-      color: #fff;
-      background: rgba(0, 0, 0, 0.6);
-      padding: 5px 15px;
-      border: 2px solid #444;
-      border-radius: 6px;
-      min-width: 45px;
-      text-align: center;
-      text-shadow: 0 0 10px rgba(255,255,255,0.5);
-    }
-    #controls-info {
-      position: absolute;
-      bottom: 15px;
-      left: 50%;
-      transform: translateX(-50%);
-      color: #aaa;
-      font-size: 13px;
-      background: rgba(0, 0, 0, 0.7);
-      padding: 8px 18px;
-      border-radius: 20px;
-      border: 1px solid #333;
-      z-index: 10;
-      text-align: center;
-    }
+    .health-bar { width: 100%; height: 100%; background: #d32f2f; transition: width 0.1s; }
+    #p2-health { float: right; background: #1976d2; }
   </style>
-  <!-- Three.js Library -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
 
-  <div id="ui">
-    <div style="width: 40%;">
-      <div class="player-label p1-color">Sub-Zero (P1)</div>
-      <div class="health-bar"><div id="p1-health" class="health-fill"></div></div>
-    </div>
-    <div id="timer">60</div>
-    <div style="width: 40%; text-align: right;">
-      <div class="player-label p2-color">Scorpion (P2)</div>
-      <div class="health-bar"><div id="p2-health" class="health-fill"></div></div>
-    </div>
-  </div>
+<div id="ui">
+  <div class="health-bar-container"><div id="p1-health" class="health-bar"></div></div>
+  <div class="health-bar-container"><div id="p2-health" class="health-bar"></div></div>
+</div>
 
-  <div id="controls-info">
-    <b>P1:</b> A/D Move | W Jump | SPACE Attack &nbsp;|&nbsp; 
-    <b>P2:</b> ←/→ Move | ↑ Jump | ENTER Attack
-  </div>
+<script>
+// --- Scene & Camera Setup ---
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x1a1a24);
+scene.fog = new THREE.FogExp2(0x1a1a24, 0.03);
 
-  <script>
-    // --- SCENE & SETUP ---
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0a0a12);
-    scene.fog = new THREE.FogExp2(0x0a0a12, 0.015);
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+document.body.appendChild(renderer.domElement);
 
-    const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    document.body.appendChild(renderer.domElement);
+// Lighting
+const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+scene.add(ambientLight);
 
-    // --- LIGHTING ---
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
-    scene.add(ambientLight);
+const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+dirLight.position.set(0, 20, 10);
+dirLight.castShadow = true;
+scene.add(dirLight);
 
-    const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
-    dirLight.position.set(0, 20, 10);
-    dirLight.castShadow = true;
-    dirLight.shadow.mapSize.width = 2048;
-    dirLight.shadow.mapSize.height = 2048;
-    dirLight.shadow.camera.left = -15;
-    dirLight.shadow.camera.right = 15;
-    dirLight.shadow.camera.top = 15;
-    dirLight.shadow.camera.bottom = -5;
-    scene.add(dirLight);
+// Floor
+const floorGeo = new THREE.PlaneGeometry(50, 20);
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.8 });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.receiveShadow = true;
+scene.add(floor);
 
-    // Arena Spotlight
-    const spotLight1 = new THREE.SpotLight(0x00aaff, 1.5, 30, Math.PI / 4, 0.5);
-    spotLight1.position.set(-10, 12, 0);
-    scene.add(spotLight1);
+// --- Fighter Class ---
+class Fighter {
+  constructor(x, color, isPlayer2 = false) {
+    this.isPlayer2 = isPlayer2;
+    this.health = 100;
+    this.position = new THREE.Vector3(x, 0, 0);
+    this.velocity = new THREE.Vector3();
+    this.isGrounded = true;
+    this.isAttacking = false;
+    this.animTime = 0;
 
-    const spotLight2 = new THREE.SpotLight(0xff3300, 1.5, 30, Math.PI / 4, 0.5);
-    spotLight2.position.set(10, 12, 0);
-    scene.add(spotLight2);
+    // Group Container
+    this.mesh = new THREE.Group();
+    this.mesh.position.copy(this.position);
+    scene.add(this.mesh);
 
-    // --- ENVIRONMENT / ARENA ---
-    const floorGeo = new THREE.PlaneGeometry(50, 20);
-    const floorMat = new THREE.MeshStandardMaterial({ color: 0x222228, roughness: 0.8, metalness: 0.2 });
-    const floor = new THREE.Mesh(floorGeo, floorMat);
-    floor.rotation.x = -Math.PI / 2;
-    floor.receiveShadow = true;
-    scene.add(floor);
+    // Build Character Body
+    const mat = new THREE.MeshStandardMaterial({ color: color });
 
-    // Arena Ring Pillars
-    const pillarGeo = new THREE.CylinderGeometry(0.5, 0.5, 12, 16);
-    const pillarMat = new THREE.MeshStandardMaterial({ color: 0x33333d, metalness: 0.8, roughness: 0.2 });
-    for (let x of [-15, 15]) {
-      for (let z of [-5, 5]) {
-        const pillar = new THREE.Mesh(pillarGeo, pillarMat);
-        pillar.position.set(x, 6, z);
-        pillar.castShadow = true;
-        scene.add(pillar);
-      }
+    this.torso = new THREE.Mesh(new THREE.BoxGeometry(1, 1.5, 0.6), mat);
+    this.torso.position.y = 1.75;
+    this.torso.castShadow = true;
+    this.mesh.add(this.torso);
+
+    this.head = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), mat);
+    this.head.position.y = 2.8;
+    this.mesh.add(this.head);
+
+    this.leftArm = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.2, 0.3), mat);
+    this.leftArm.position.set(-0.8, 1.8, 0);
+    this.mesh.add(this.leftArm);
+
+    this.rightArm = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.2, 0.3), mat);
+    this.rightArm.position.set(0.8, 1.8, 0);
+    this.mesh.add(this.rightArm);
+
+    this.leftLeg = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.4), mat);
+    this.leftLeg.position.set(-0.3, 0.6, 0);
+    this.mesh.add(this.leftLeg);
+
+    this.rightLeg = new THREE.Mesh(new THREE.BoxGeometry(0.4, 1.2, 0.4), mat);
+    this.rightLeg.position.set(0.3, 0.6, 0);
+    this.mesh.add(this.rightLeg);
+  }
+
+  update(opponent) {
+    // Movement Physics
+    this.position.add(this.velocity);
+    this.velocity.y -= 0.015; // Gravity
+
+    if (this.position.y <= 0) {
+      this.position.y = 0;
+      this.velocity.y = 0;
+      this.isGrounded = true;
     }
 
-    // --- CHARACTER BUILDER (3D Articulated Fighter) ---
-    function createFighter(primaryColor) {
-      const group = new THREE.Group();
-      const mat = new THREE.MeshStandardMaterial({ color: primaryColor, roughness: 0.4, metalness: 0.3 });
-      const skinMat = new THREE.MeshStandardMaterial({ color: 0xd2b48c, roughness: 0.7 });
-      const jointMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
+    // Stage Boundaries
+    this.position.x = Math.max(-12, Math.min(12, this.position.x));
+    this.mesh.position.copy(this.position);
 
-      // Torso
-      const torso = new THREE.Mesh(new THREE.BoxGeometry(0.8, 1.2, 0.5), mat);
-      torso.position.y = 1.6;
-      torso.castShadow = true;
-      group.add(torso);
-
-      // Head
-      const head = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), skinMat);
-      head.position.y = 2.4;
-      head.castShadow = true;
-      group.add(head);
-
-      // Mask
-      const mask = new THREE.Mesh(new THREE.BoxGeometry(0.32, 0.2, 0.32), mat);
-      mask.position.set(0, 2.35, 0.1);
-      group.add(mask);
-
-      // Arms Helper
-      function createArm(isLeft) {
-        const armGroup = new THREE.Group();
-        armGroup.position.set(isLeft ? -0.55 : 0.55, 2.1, 0);
-
-        const upperArm = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.6), mat);
-        upperArm.position.y = -0.3;
-        upperArm.castShadow = true;
-        armGroup.add(upperArm);
-
-        const forearm = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.09, 0.6), skinMat);
-        forearm.position.y = -0.8;
-        forearm.castShadow = true;
-        armGroup.add(forearm);
-
-        const fist = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.18, 0.18), jointMat);
-        fist.position.y = -1.15;
-        armGroup.add(fist);
-
-        return armGroup;
-      }
-
-      // Legs Helper
-      function createLeg(isLeft) {
-        const legGroup = new THREE.Group();
-        legGroup.position.set(isLeft ? -0.25 : 0.25, 1.0, 0);
-
-        const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.12, 0.7), jointMat);
-        thigh.position.y = -0.35;
-        thigh.castShadow = true;
-        legGroup.add(thigh);
-
-        const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.1, 0.7), mat);
-        shin.position.y = -0.95;
-        shin.castShadow = true;
-        legGroup.add(shin);
-
-        return legGroup;
-      }
-
-      const leftArm = createArm(true);
-      const rightArm = createArm(false);
-      const leftLeg = createLeg(true);
-      const rightLeg = createLeg(false);
-
-      group.add(leftArm);
-      group.add(rightArm);
-      group.add(leftLeg);
-      group.add(rightLeg);
-
-      return { group, leftArm, rightArm, leftLeg, rightLeg };
+    // Face Opponent
+    if (opponent) {
+      this.mesh.rotation.y = this.position.x < opponent.position.x ? Math.PI / 2 : -Math.PI / 2;
     }
 
-    // --- FIGHTER CLASS ---
-    class Fighter {
-      constructor({ x, color, facingRight }) {
-        this.meshData = createFighter(color);
-        this.mesh = this.meshData.group;
-        this.mesh.position.x = x;
-        scene.add(this.mesh);
-
-        this.velocity = { x: 0, y: 0 };
-        this.facingRight = facingRight;
-        this.health = 100;
-        this.isGrounded = true;
-        this.isAttacking = false;
-        this.isHit = false;
-        this.animTimer = 0;
-
-        this.updateFacing();
-      }
-
-      updateFacing() {
-        this.mesh.rotation.y = this.facingRight ? Math.PI / 2 : -Math.PI / 2;
-      }
-
-      update() {
-        // Physics & Movement
-        this.mesh.position.x += this.velocity.x;
-        this.mesh.position.y += this.velocity.y;
-
-        // Gravity
-        if (this.mesh.position.y > 0) {
-          this.velocity.y -= 0.015;
-          this.isGrounded = false;
-        } else {
-          this.mesh.position.y = 0;
-          this.velocity.y = 0;
-          this.isGrounded = true;
-        }
-
-        // Arena Bounds
-        if (this.mesh.position.x < -12) this.mesh.position.x = -12;
-        if (this.mesh.position.x > 12) this.mesh.position.x = 12;
-
-        // Animations
-        this.animTimer += 0.1;
-        const { leftArm, rightArm, leftLeg, rightLeg } = this.meshData;
-
-        if (this.isHit) {
-          // Hit Reaction Animation
-          this.mesh.rotation.z = this.facingRight ? -0.3 : 0.3;
-          rightArm.rotation.x = 1.5;
-        } else if (this.isAttacking) {
-          // Punch Animation
-          rightArm.rotation.x = Math.PI / 2;
-          rightArm.rotation.z = 0.3;
-          leftArm.rotation.x = -0.5;
-        } else {
-          // Idle & Walking Animations
-          this.mesh.rotation.z = 0;
-          const walkCycle = Math.sin(this.animTimer * 2) * (this.velocity.x !== 0 ? 0.6 : 0.1);
-          
-          leftArm.rotation.x = walkCycle;
-          rightArm.rotation.x = -walkCycle;
-          leftLeg.rotation.x = -walkCycle;
-          rightLeg.rotation.x = walkCycle;
-
-          // Default guard pose
-          rightArm.rotation.z = -0.3;
-          leftArm.rotation.z = 0.3;
-        }
-      }
-
-      attack(enemy) {
-        if (this.isAttacking || this.isHit) return;
-        this.isAttacking = true;
-
-        setTimeout(() => {
-          // Hitbox Range Check
-          const dist = Math.abs(this.mesh.position.x - enemy.mesh.position.x);
-          if (dist < 2.0 && Math.abs(this.mesh.position.y - enemy.mesh.position.y) < 1.5) {
-            enemy.takeHit(10);
-          }
-        }, 100);
-
-        setTimeout(() => { this.isAttacking = false; }, 300);
-      }
-
-      takeHit(damage) {
-        this.health = Math.max(0, this.health - damage);
-        this.isHit = true;
-        this.velocity.x = this.facingRight ? -0.1 : 0.1;
-
-        setTimeout(() => {
-          this.isHit = false;
-          this.velocity.x = 0;
-        }, 250);
+    // Animations
+    this.animTime += 0.1;
+    if (this.isGrounded && !this.isAttacking) {
+      if (Math.abs(this.velocity.x) > 0.01) {
+        this.leftLeg.rotation.x = Math.sin(this.animTime) * 0.5;
+        this.rightLeg.rotation.x = -Math.sin(this.animTime) * 0.5;
+        this.leftArm.rotation.x = -Math.sin(this.animTime) * 0.5;
+        this.rightArm.rotation.x = Math.sin(this.animTime) * 0.5;
+      } else {
+        this.torso.position.y = 1.75 + Math.sin(this.animTime * 0.5) * 0.05;
+        this.leftArm.rotation.x = 0;
+        this.rightArm.rotation.x = 0;
+        this.leftLeg.rotation.x = 0;
+        this.rightLeg.rotation.x = 0;
       }
     }
+  }
 
-    // Instantiate P1 and P2
-    const player1 = new Fighter({ x: -4, color: 0x0077ff, facingRight: true });
-    const player2 = new Fighter({ x: 4, color: 0xff2200, facingRight: false });
+  attack(opponent) {
+    if (this.isAttacking) return;
+    this.isAttacking = true;
 
-    // --- CONTROLS ---
-    const keys = {
-      a: false, d: false,
-      ArrowLeft: false, ArrowRight: false
-    };
+    const attackArm = this.mesh.rotation.y > 0 ? this.rightArm : this.leftArm;
+    attackArm.rotation.z = -Math.PI / 3;
+    attackArm.position.z = 0.8;
 
-    window.addEventListener('keydown', (e) => {
-      switch (e.key) {
-        // Player 1
-        case 'a': keys.a = true; break;
-        case 'd': keys.d = true; break;
-        case 'w': if (player1.isGrounded) player1.velocity.y = 0.3; break;
-        case ' ': player1.attack(player2); break;
-
-        // Player 2
-        case 'ArrowLeft': keys.ArrowLeft = true; break;
-        case 'ArrowRight': keys.ArrowRight = true; break;
-        case 'ArrowUp': if (player2.isGrounded) player2.velocity.y = 0.3; break;
-        case 'Enter': player2.attack(player1); break;
-      }
-    });
-
-    window.addEventListener('keyup', (e) => {
-      switch (e.key) {
-        case 'a': keys.a = false; break;
-        case 'd': keys.d = false; break;
-        case 'ArrowLeft': keys.ArrowLeft = false; break;
-        case 'ArrowRight': keys.ArrowRight = false; break;
-      }
-    });
-
-    // Dynamic Camera Tracking
-    function updateCamera() {
-      const midPointX = (player1.mesh.position.x + player2.mesh.position.x) / 2;
-      const dist = Math.abs(player1.mesh.position.x - player2.mesh.position.x);
-      
-      camera.position.x = midPointX;
-      camera.position.z = Math.max(8, dist + 4);
-      camera.position.y = 3 + dist * 0.1;
-      camera.lookAt(midPointX, 1.8, 0);
+    const dist = this.position.distanceTo(opponent.position);
+    if (dist < 2.2) {
+      opponent.takeDamage(10);
     }
 
-    // UI Update Loop
-    function updateUI() {
-      document.getElementById('p1-health').style.width = player1.health + '%';
-      document.getElementById('p2-health').style.width = player2.health + '%';
-    }
+    setTimeout(() => {
+      attackArm.rotation.z = 0;
+      attackArm.position.z = 0;
+      this.isAttacking = false;
+    }, 200);
+  }
 
-    // Match Timer
-    let timeLeft = 60;
-    setInterval(() => {
-      if (timeLeft > 0) {
-        timeLeft--;
-        document.getElementById('timer').innerText = timeLeft;
+  takeDamage(amount) {
+    this.health = Math.max(0, this.health - amount);
+    const elemId = this.isPlayer2 ? 'p2-health' : 'p1-health';
+    document.getElementById(elemId).style.width = this.health + '%';
+    
+    this.position.x += this.mesh.rotation.y > 0 ? -0.3 : 0.3;
+  }
+}
+
+// Spawn Players
+const p1 = new Fighter(-3, 0xd32f2f, false);
+const p2 = new Fighter(3, 0x1976d2, true);
+
+// --- AI Opponent Logic ---
+let aiCooldown = false;
+
+function updateAI() {
+  const dist = p2.position.distanceTo(p1.position);
+  const strikeDistance = 1.8;
+
+  // Reset horizontal velocity
+  p2.velocity.x = 0;
+
+  // Move toward Player 1 if out of range
+  if (dist > strikeDistance) {
+    if (p2.position.x < p1.position.x) {
+      p2.velocity.x = 0.07; // Move Right
+    } else {
+      p2.velocity.x = -0.07; // Move Left
+    }
+  } else {
+    // Attack when in range with a randomized delay
+    if (!aiCooldown) {
+      aiCooldown = true;
+      p2.attack(p1);
+
+      // Randomize jump occasionally
+      if (Math.random() < 0.3 && p2.isGrounded) {
+        p2.velocity.y = 0.3;
+        p2.isGrounded = false;
       }
-    }, 1000);
 
-    // --- MAIN GAME LOOP ---
-    function animate() {
-      requestAnimationFrame(animate);
-
-      // P1 Input Handling
-      player1.velocity.x = 0;
-      if (keys.a) player1.velocity.x = -0.08;
-      if (keys.d) player1.velocity.x = 0.08;
-
-      // P2 Input Handling
-      player2.velocity.x = 0;
-      if (keys.ArrowLeft) player2.velocity.x = -0.08;
-      if (keys.ArrowRight) player2.velocity.x = 0.08;
-
-      // Ensure fighters turn towards each other
-      player1.facingRight = player1.mesh.position.x < player2.mesh.position.x;
-      player2.facingRight = player2.mesh.position.x < player1.mesh.position.x;
-      player1.updateFacing();
-      player2.updateFacing();
-
-      player1.update();
-      player2.update();
-
-      updateCamera();
-      updateUI();
-
-      renderer.render(scene, camera);
+      // Attack cooldown timer (500ms - 1200ms)
+      setTimeout(() => {
+        aiCooldown = false;
+      }, 500 + Math.random() * 700);
     }
+  }
+}
 
-    // Responsive Canvas Resize
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    });
+// --- Controls (Player 1 Only) ---
+const keys = {};
+window.addEventListener('keydown', e => keys[e.code] = true);
+window.addEventListener('keyup', e => keys[e.code] = false);
 
-    animate();
-  </script>
+function handlePlayerInput() {
+  p1.velocity.x = 0;
+  if (keys['KeyA']) p1.velocity.x = -0.1;
+  if (keys['KeyD']) p1.velocity.x = 0.1;
+  if (keys['KeyW'] && p1.isGrounded) { p1.velocity.y = 0.35; p1.isGrounded = false; }
+  if (keys['Space']) p1.attack(p2);
+}
+
+// --- Main Loop ---
+function animate() {
+  requestAnimationFrame(animate);
+
+  handlePlayerInput();
+  updateAI();
+
+  p1.update(p2);
+  p2.update(p1);
+
+  // Camera tracking
+  const midX = (p1.position.x + p2.position.x) / 2;
+  const dist = Math.abs(p1.position.x - p2.position.x);
+  
+  camera.position.x = midX;
+  camera.position.z = Math.max(8, dist + 4);
+  camera.position.y = 3;
+  camera.lookAt(midX, 1.5, 0);
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
 </body>
 </html>
